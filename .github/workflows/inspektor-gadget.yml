@@ -833,6 +833,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      # To use keyless signing, we need to give write permissions to the
+      # id-token, so we can get an OIDC JWT ID token:
+      # https://docs.github.com/en/enterprise-server@3.6/actions/deployment/security-hardening-your-deployments/about-security-hardening-with-openid-connect#adding-permissions-settings
+      id-token: write
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
     - uses: actions/checkout@v3
@@ -872,6 +876,19 @@ jobs:
           hash=$(sha256sum $i | cut -d' ' -f1)
           echo "${hash}  $(basename $i)" >> inspektor-gadget-${{ github.ref_name }}_checksums.txt
         done
+    - name: Install Cosign
+      uses: sigstore/cosign-installer@main
+      with:
+        # We need to cosign v2.0.0 to use keyless signing without using
+        # COSIGN_EXPERIMENTAL. This version was released recently:
+        # https://blog.sigstore.dev/cosign-2-0-released/
+        cosign-release: 'v2.0.0'
+    - name: Sign checksums file
+      shell: bash
+      run: |
+        checksums_file=inspektor-gadget-${{ github.ref_name }}_checksums.txt
+
+        cosign sign-blob --yes $checksums_file --output-signature="${checksums_file}.sig" --output-certificate="${checksums_file}.cert"
     - name: Upload Gadget Release *.tar.gz
       uses: csexton/release-asset-action@v2
       with:
@@ -888,6 +905,18 @@ jobs:
       uses: csexton/release-asset-action@v2
       with:
         file: inspektor-gadget-${{ github.ref_name }}_checksums.txt
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        release-url: ${{ steps.create_release.outputs.upload_url }}
+    - name: Upload signature
+      uses: csexton/release-asset-action@v2
+      with:
+        pattern: "*.sig"
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        release-url: ${{ steps.create_release.outputs.upload_url }}
+    - name: Upload certificate
+      uses: csexton/release-asset-action@v2
+      with:
+        pattern: "*.cert"
         github-token: ${{ secrets.GITHUB_TOKEN }}
         release-url: ${{ steps.create_release.outputs.upload_url }}
     - name: Update new version in krew-index
