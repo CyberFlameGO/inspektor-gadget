@@ -46,6 +46,8 @@ type Event struct {
 	DNSName    string        `json:"name,omitempty" column:"name,width:30"`
 	Rcode      string        `json:"rcode,omitempty" column:"rcode,minWidth:8"`
 	Latency    time.Duration `json:"latency,omitempty" column:"latency,hide"`
+	NumAnswers int           `json:"numAnswers,omitempty" column:"numAnswers,hide"`
+	Addresses  []string      `json:"addresses,omitempty" column:"addresses,hide"`
 }
 
 func GetColumns() *columns.Columns[Event] {

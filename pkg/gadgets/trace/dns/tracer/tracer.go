@@ -17,8 +17,8 @@
 package tracer
 
 import (
-	"errors"
 	"fmt"
+	"net/netip"
 	"syscall"
 	"unsafe"
 
@@ -36,6 +36,7 @@ const (
 	BPFProgName     = "ig_trace_dns"
 	BPFPerfMapName  = "events"
 	BPFSocketAttach = 50
+	MaxAddrAnswers  = 8 // Keep aligned with MAX_ADDR_ANSWERS in bpf/dns-common.h
 )
 
 type Tracer struct {
@@ -55,8 +56,12 @@ func NewTracer() (*Tracer, error) {
 
 	parseAndEnrichDNSEvent := func(rawSample []byte, netns uint64) (*types.Event, error) {
 		bpfEvent := (*dnsEventT)(unsafe.Pointer(&rawSample[0]))
-		if len(rawSample) < int(unsafe.Sizeof(*bpfEvent)) {
-			return nil, errors.New("invalid sample size")
+		// TODO: Why do I need 4+?
+		// TODO: create
+		expected := 4 + int(unsafe.Sizeof(*bpfEvent)) - MaxAddrAnswers*16 + int(bpfEvent.Anaddrcount)*16
+		if len(rawSample) != expected {
+			return nil, fmt.Errorf("invalid sample size: received: %d vs expected: %d",
+				len(rawSample), expected)
 		}
 
 		event, err := bpfEventToDNSEvent(bpfEvent, netns)
@@ -285,6 +290,16 @@ func bpfEventToDNSEvent(bpfEvent *dnsEventT, netns uint64) (*types.Event, error)
 		if !ok {
 			event.Rcode = "UNKNOWN"
 		}
+	}
+
+	// There's a limit on the number of addresses in the BPF event,
+	// so bpfEvent.AnaddrCount is always less than or equal to bpfEvent.Ancount
+	event.NumAnswers = int(bpfEvent.Ancount)
+	for i := uint16(0); i < bpfEvent.Anaddrcount; i++ {
+		// For A records, the address in the bpf event will be
+		// IPv4-mapped-IPv6, which netip.Addr.Unmap() converts back to IPv4.
+		addr := netip.AddrFrom16(bpfEvent.Anaddr[i]).Unmap().String()
+		event.Addresses = append(event.Addresses, addr)
 	}
 
 	return &event, nil
