@@ -19,15 +19,13 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/inspektor-gadget/inspektor-gadget/cmd/kubectl-gadget/advise"
-	"github.com/inspektor-gadget/inspektor-gadget/cmd/kubectl-gadget/audit"
-	"github.com/inspektor-gadget/inspektor-gadget/cmd/kubectl-gadget/profile"
-	"github.com/inspektor-gadget/inspektor-gadget/cmd/kubectl-gadget/snapshot"
-	"github.com/inspektor-gadget/inspektor-gadget/cmd/kubectl-gadget/top"
-	"github.com/inspektor-gadget/inspektor-gadget/cmd/kubectl-gadget/trace"
-	"github.com/inspektor-gadget/inspektor-gadget/pkg/environment"
-
+	"github.com/inspektor-gadget/inspektor-gadget/cmd/common"
 	"github.com/inspektor-gadget/inspektor-gadget/cmd/kubectl-gadget/utils"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/columns"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/environment"
+	grpcruntime "github.com/inspektor-gadget/inspektor-gadget/pkg/runtime/grpc"
+
+	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/all-gadgets"
 )
 
 // common params for all gadgets
@@ -40,16 +38,15 @@ var rootCmd = &cobra.Command{
 
 func init() {
 	utils.FlagInit(rootCmd)
-
-	rootCmd.AddCommand(advise.NewAdviseCmd())
-	rootCmd.AddCommand(audit.NewAuditCmd())
-	rootCmd.AddCommand(profile.NewProfileCmd())
-	rootCmd.AddCommand(snapshot.NewSnapshotCmd())
-	rootCmd.AddCommand(top.NewTopCmd())
-	rootCmd.AddCommand(trace.NewTraceCmd())
 }
 
 func main() {
+	runtime := grpcruntime.New()
+
+	// columnFilters for kubectl-gadget
+	columnFilters := []columns.ColumnFilter{columns.Or(columns.WithTag("kubernetes"), columns.WithNoTags())}
+	common.AddCommandsFromRegistry(rootCmd, runtime, columnFilters)
+
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}
