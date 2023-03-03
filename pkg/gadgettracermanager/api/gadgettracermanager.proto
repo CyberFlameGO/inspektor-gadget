@@ -78,3 +78,47 @@ message Dump {
   string traces = 2;
   string stacks = 3;
 }
+
+message GadgetRunRequest {
+  string gadgetName = 1;
+  string gadgetCategory = 2;
+  map<string, string> params = 3;
+  repeated string nodes = 10;
+  bool fanOut = 11;
+  uint32 logLevel = 12;
+}
+
+message GadgetAttachRequest {
+  string ID = 1;
+  bool fanOut = 11;
+}
+
+message GadgetStopRequest {
+}
+
+message GadgetEvent {
+  uint32 type = 1;
+  uint32 seq = 2;
+  bytes payload = 3;
+}
+
+message GadgetControlRequest {
+  oneof Event {
+      GadgetRunRequest runRequest = 1;
+      GadgetStopRequest stopRequest = 2;
+  }
+}
+
+message InfoRequest {
+  string version = 1;
+}
+
+message InfoResponse {
+  string version = 1;
+  bytes catalog = 2;
+}
+
+service GadgetManager {
+  rpc GetInfo(InfoRequest) returns (InfoResponse) {}
+  rpc RunGadget(stream GadgetControlRequest) returns (stream GadgetEvent) {}
+}
