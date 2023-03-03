@@ -8,7 +8,11 @@ ARG BUILDER_IMAGE=debian:bullseye
 # See BCC section in docs/devel/CONTRIBUTING.md for further details.
 ARG BCC="quay.io/kinvolk/bcc:gadget"
 
+# bpftrace upstream image
+ARG BPFTRACE="quay.io/iovisor/bpftrace:v0.17.0"
+
 FROM ${BCC} as bcc
+FROM ${BPFTRACE} as bpftrace
 FROM --platform=${BUILDPLATFORM} ${BUILDER_IMAGE} as builder
 
 ARG TARGETARCH
@@ -72,6 +76,9 @@ COPY gadget-container/hooks/nri/conf.json /opt/hooks/nri/
 
 # BTF files
 COPY hack/btfs /btfs/
+
+# bpftrace binary
+COPY --from=bpftrace /usr/bin/bpftrace /usr/bin/bpftrace
 
 # Mitigate https://github.com/kubernetes/kubernetes/issues/106962.
 RUN rm -f /var/run
