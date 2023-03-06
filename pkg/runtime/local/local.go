@@ -66,7 +66,7 @@ func (r *Runtime) ParamDescs() params.ParamDescs {
 	return nil
 }
 
-func (r *Runtime) RunGadget(gadgetCtx runtime.GadgetContext) (out []byte, err error) {
+func (r *Runtime) RunGadget(gadgetCtx runtime.GadgetContext) (out map[string][]byte, err error) {
 	log := gadgetCtx.Logger()
 
 	log.Debugf("running with local runtime")
@@ -103,10 +103,11 @@ func (r *Runtime) RunGadget(gadgetCtx runtime.GadgetContext) (out []byte, err er
 
 		if results, ok := gadgetInstance.(gadgets.GadgetResult); ok {
 			log.Debugf("getting result")
-			out, err = results.Result()
-			if err != nil {
-				err = fmt.Errorf("getting result: %w", err)
+			res, tmpErr := results.Result()
+			if tmpErr != nil {
+				err = fmt.Errorf("getting result: %w", tmpErr)
 			}
+			out = map[string][]byte{"": res}
 		}
 	}()
 

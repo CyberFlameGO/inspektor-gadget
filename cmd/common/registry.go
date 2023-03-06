@@ -217,17 +217,27 @@ func buildCommandFromGadget(
 
 				// This kind of gadgets return directly the result instead of
 				// using the parser
-				result, err := runtime.RunGadget(gadgetCtx)
+				results, err := runtime.RunGadget(gadgetCtx)
 				if err != nil {
 					return fmt.Errorf("running gadget: %w", err)
 				}
 
-				transformed, err := transformResult(result)
-				if err != nil {
-					return fmt.Errorf("transforming result: %w", err)
+				for node, result := range results {
+					transformed, err := transformResult(result)
+					if err != nil {
+						gadgetCtx.Logger().Warnf("transform result for %q: %v", node, result)
+						continue
+					}
+					results[node] = transformed
 				}
 
-				fe.Output(string(transformed))
+				if singleResult, ok := results[""]; ok && len(results) == 1 {
+					fe.Output(string(singleResult))
+				} else {
+					for key, result := range results {
+						fe.Output(fmt.Sprintf("%s: %s", key, string(result)))
+					}
+				}
 
 				return nil
 			}

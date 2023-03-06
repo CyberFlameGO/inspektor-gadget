@@ -43,6 +43,6 @@ type Runtime interface {
 	Close() error
 	GlobalParamDescs() params.ParamDescs
 	ParamDescs() params.ParamDescs
-	RunGadget(gadgetCtx GadgetContext) ([]byte, error)
+	RunGadget(gadgetCtx GadgetContext) (map[string][]byte, error)
 	GetCatalog() (*Catalog, error)
 }
