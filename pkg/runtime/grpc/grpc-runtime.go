@@ -444,7 +444,7 @@ func (r *Runtime) runGadget(gadgetCtx runtime.GadgetContext, pod gadgetPod) ([]b
 }
 
 func (r *Runtime) GetCatalog() (*runtime.Catalog, error) {
-	catalog, err := r.loadLocalGadgetCatalog()
+	catalog, err := r.loadRemoteGadgetCatalog()
 	if err == nil {
 		return catalog, nil
 	}
