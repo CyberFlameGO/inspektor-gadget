@@ -313,6 +313,11 @@ func (r *Runtime) RunGadget(gadgetCtx runtime.GadgetContext) (map[string][]byte,
 	return results, nil
 }
 
+// TODO: should we mode this to pkg/operators/operators.go
+type NodeInfoSetter interface {
+	SetNode(string)
+}
+
 func (r *Runtime) runGadget(gadgetCtx runtime.GadgetContext, pod gadgetPod) ([]byte, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -359,8 +364,23 @@ func (r *Runtime) runGadget(gadgetCtx runtime.GadgetContext, pod gadgetPod) ([]b
 	jsonArrayHandler := func([]byte) {}
 
 	if parser != nil {
-		jsonHandler = parser.JSONHandlerFunc()
-		jsonArrayHandler = parser.JSONHandlerFuncArray(pod.node)
+		var nodeEnricher func(any) error
+
+		if _, canEnrichNode := gadgetCtx.GadgetDesc().EventPrototype().(NodeInfoSetter); canEnrichNode {
+			nodeEnricher = func(ev any) error {
+				setter, canEnrichNode := ev.(NodeInfoSetter)
+				if !canEnrichNode {
+					return fmt.Errorf("event doesn't implement NodeInfoSetter")
+				}
+
+				setter.SetNode(pod.node)
+
+				return nil
+			}
+		}
+
+		jsonHandler = parser.JSONHandlerFunc(nodeEnricher)
+		jsonArrayHandler = parser.JSONHandlerFuncArray(pod.node, nodeEnricher)
 	}
 
 	doneChan := make(chan bool)
