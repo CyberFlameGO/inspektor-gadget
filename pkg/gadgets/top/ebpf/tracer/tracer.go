@@ -18,6 +18,7 @@ package tracer
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -39,6 +40,7 @@ import (
 type Config struct {
 	MaxRows  int
 	Interval time.Duration
+	Count    int
 	SortBy   []string
 }
 
@@ -72,24 +74,24 @@ func NewTracer(config *Config, enricher gadgets.DataNodeEnricher,
 		prevStats:     make(map[string]programStats),
 	}
 
-	if err := t.start(); err != nil {
-		t.Stop()
+	if err := t.install(); err != nil {
+		t.cleanup()
 		return nil, err
 	}
 
 	statCols, err := columns.NewColumns[types.Stats]()
 	if err != nil {
-		t.Stop()
+		t.cleanup()
 		return nil, err
 	}
 	t.colMap = statCols.GetColumnMap()
 
-	t.run()
+	go t.run(context.TODO())
 
 	return t, nil
 }
 
-func (t *Tracer) start() error {
+func (t *Tracer) install() error {
 	// Enable stats collection
 	err := bpfstats.EnableBPFStats()
 	if err != nil {
@@ -111,7 +113,13 @@ func (t *Tracer) start() error {
 	return nil
 }
 
+// Stop stops the tracer
+// TODO: Remove after refactoring
 func (t *Tracer) Stop() {
+	t.cleanup()
+}
+
+func (t *Tracer) cleanup() {
 	close(t.done)
 
 	if t.iter != nil {
@@ -368,33 +376,57 @@ func (t *Tracer) nextStats() ([]*types.Stats, error) {
 	return stats, nil
 }
 
-func (t *Tracer) run() {
-	timer := time.NewTicker(t.config.Interval)
-	go func() {
-		for {
-			select {
-			case <-t.done:
-				return
-			case <-timer.C:
-				stats, err := t.nextStats()
-				if err != nil {
-					t.eventCallback(&top.Event[types.Stats]{
-						Error: fmt.Sprintf("could not get next stats: %s", err),
-					})
-					return
-				}
+func (t *Tracer) run(ctx context.Context) error {
+	// Don't use a context with a timeout but a counter to avoid having to deal
+	// with two timers: one for the timeout and another for the ticker.
+	count := t.config.Count
+	ticker := time.NewTicker(t.config.Interval)
+	defer ticker.Stop()
 
-				n := len(stats)
-				if n > t.config.MaxRows {
-					n = t.config.MaxRows
+	for {
+		select {
+		case <-t.done:
+			// TODO: Once we completely move to use Run instead of NewTracer,
+			// we can remove this as nobody will directly call Stop (cleanup).
+			return nil
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+			stats, err := t.nextStats()
+			if err != nil {
+				return fmt.Errorf("getting next stats: %w", err)
+			}
+
+			n := len(stats)
+			if n > t.config.MaxRows {
+				n = t.config.MaxRows
+			}
+			t.eventCallback(&top.Event[types.Stats]{Stats: stats[:n]})
+
+			if count > 0 {
+				count--
+				if count == 0 {
+					return nil
 				}
-				t.eventCallback(&top.Event[types.Stats]{Stats: stats[:n]})
 			}
 		}
-	}()
+	}
 }
 
 // --- Registry changes
+
+func (t *Tracer) Run(gadgetCtx gadgets.GadgetContext) error {
+	if err := t.init(gadgetCtx); err != nil {
+		return fmt.Errorf("initializing tracer: %w", err)
+	}
+
+	defer t.cleanup()
+	if err := t.install(); err != nil {
+		return fmt.Errorf("installing tracer: %w", err)
+	}
+
+	return t.run(gadgetCtx.Context())
+}
 
 func (t *Tracer) SetEventHandlerArray(handler any) {
 	nh, ok := handler.(func(ev []*types.Stats))
@@ -411,23 +443,6 @@ func (t *Tracer) SetEventHandlerArray(handler any) {
 	}
 }
 
-func (t *Tracer) Start() error {
-	if err := t.start(); err != nil {
-		t.Stop()
-		return err
-	}
-
-	statCols, err := columns.NewColumns[types.Stats]()
-	if err != nil {
-		t.Stop()
-		return err
-	}
-	t.colMap = statCols.GetColumnMap()
-
-	t.run()
-	return nil
-}
-
 func (g *GadgetDesc) NewInstance() (gadgets.Gadget, error) {
 	tracer := &Tracer{
 		config:    &Config{},
@@ -437,10 +452,22 @@ func (g *GadgetDesc) NewInstance() (gadgets.Gadget, error) {
 	return tracer, nil
 }
 
-func (t *Tracer) Init(gadgetCtx gadgets.GadgetContext) error {
+func (t *Tracer) init(gadgetCtx gadgets.GadgetContext) error {
 	params := gadgetCtx.GadgetParams()
 	t.config.MaxRows = params.Get(gadgets.ParamMaxRows).AsInt()
 	t.config.SortBy = params.Get(gadgets.ParamSortBy).AsStringSlice()
 	t.config.Interval = time.Second * time.Duration(params.Get(gadgets.ParamInterval).AsInt())
+
+	var err error
+	if t.config.Count, err = top.ComputeCount(t.config.Interval, gadgetCtx.Timeout()); err != nil {
+		return err
+	}
+
+	statCols, err := columns.NewColumns[types.Stats]()
+	if err != nil {
+		return err
+	}
+	t.colMap = statCols.GetColumnMap()
+
 	return nil
 }

@@ -274,7 +274,15 @@ func (t *Tracer[Event]) Detach(pid uint32) error {
 	return fmt.Errorf("pid %d is not attached", pid)
 }
 
+// Close closes the tracer
+// TODO: Remove after refactoring
 func (t *Tracer[Event]) Close() {
+	t.Cleanup()
+}
+
+// ---
+
+func (t *Tracer[Event]) Cleanup() {
 	for key, l := range t.attachments {
 		t.releaseAttachment(key, l)
 	}

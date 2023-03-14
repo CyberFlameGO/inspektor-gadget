@@ -66,10 +66,6 @@ type GadgetDesc interface {
 	EventPrototype() any
 }
 
-type GadgetResult interface {
-	Result() ([]byte, error)
-}
-
 type OutputFormats map[string]OutputFormat
 
 // OutputFormat can hold alternative output formats for a gadget. Whenever
@@ -108,33 +104,31 @@ type EventEnricherSetter interface {
 	SetEventEnricher(func(ev any) error)
 }
 
-type StartStopGadget interface {
-	Start() error
-	Stop()
-}
-
-// RunGadget is an alternative to StartStopGadget that expects the result to be emitted using the EventHandler
-// as well but doesn't need to be stopped (manually)
+// RunGadget runs a gadget and emits events using the EventHandler. The Run
+// method is expected to be blocking and return only when the context is done,
+// after which the gadget should clean up all resources.
 type RunGadget interface {
-	Run() error
+	Run(GadgetContext) error
 }
 
-// StartStopAltGadget is an alternative interface to StartStop, as some gadgets
-// already have the Start() and Stop() functions defined, but with a different signature
-// After we've migrated to the interfaces, the gadgets should be altered to use the
-// Start/Stop signatures of the above StartStopGadget interface.
-type StartStopAltGadget interface {
-	StartAlt() error
-	StopAlt()
+// RunWithResultGadget is an alternative to RunGadget that returns the result
+// of the gadget instead of emitting events.
+type RunWithResultGadget interface {
+	RunWithResult(GadgetContext) ([]byte, error)
 }
 
-type CloseGadget interface {
+// InitRunClose is used when gadgets need to be initialized before the operators
+// are installed. This is useful when operators need to interact with the
+// gadget during PreGadgetRun(). Notice Init() is not blocking but it returns
+// immediately after initializing the gadget. Run() must be called to wait for
+// the gadget to run, and Close() to clean up things.
+type InitRunClose interface {
+	RunGadget
+	Init(GadgetContext) error
 	Close()
 }
 
-type Gadget interface {
-	Init(GadgetContext) error
-}
+type Gadget any
 
 // GadgetInstantiate is the same interface as Gadget but adds one call to instantiate an actual
 // tracer

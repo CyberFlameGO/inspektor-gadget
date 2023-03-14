@@ -17,10 +17,12 @@
 package tracer
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"unsafe"
 
+	gadgetcontext "github.com/inspektor-gadget/inspektor-gadget/pkg/gadget-context"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/internal/networktracer"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/trace/sni/types"
@@ -38,6 +40,9 @@ const (
 
 type Tracer struct {
 	*networktracer.Tracer[types.Event]
+
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 func NewTracer() (*Tracer, error) {
@@ -92,17 +97,41 @@ func parseSNIEvent(sample []byte, netns uint64) (*types.Event, error) {
 }
 
 // --- Registry changes
+// TODO: This can be optimized a lot after using NewInstance() for everything
 
 func (g *GadgetDesc) NewInstance() (gadgets.Gadget, error) {
 	return &Tracer{}, nil
 }
 
 func (t *Tracer) Init(gadgetCtx gadgets.GadgetContext) error {
-	// TODO: Clean up
+	if err := t.install(); err != nil {
+		t.Close()
+		return fmt.Errorf("installing tracer: %w", err)
+	}
+
+	t.ctx, t.cancel = gadgetcontext.WithTimeoutOrCancel(gadgetCtx.Context(), gadgetCtx.Timeout())
+	return nil
+}
+
+func (t *Tracer) install() error {
+	// TODO: It is ugly. Clean it up.
 	tracer, err := NewTracer()
 	if err != nil {
 		return err
 	}
 	t.Tracer = tracer.Tracer
 	return nil
+}
+
+func (t *Tracer) Run(gadgetCtx gadgets.GadgetContext) error {
+	<-t.ctx.Done()
+	return nil
+}
+
+func (t *Tracer) Close() {
+	if t.cancel != nil {
+		t.cancel()
+	}
+
+	t.Cleanup()
 }

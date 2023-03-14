@@ -55,31 +55,18 @@ func (r *Runtime) RunGadget(gadgetCtx runtime.GadgetContext) (out []byte, err er
 		return out, fmt.Errorf("instantiating gadget: %w", err)
 	}
 
-	err = gadgetInstance.Init(gadgetCtx)
-	if err != nil {
-		return out, fmt.Errorf("initializing gadget: %w", err)
-	}
-
-	// Deferring getting results and closing to make sure operators got their chance to clean up properly beforehand
-	defer func() {
-		if closer, ok := gadgetInstance.(gadgets.CloseGadget); ok {
-			log.Debugf("calling gadget.Close()")
-			closer.Close()
-		}
-
-		// No need to get results if gadget failed
+	// Initialize gadgets, if needed
+	if initRunClose, ok := gadgetInstance.(gadgets.InitRunClose); ok {
+		log.Debugf("calling gadget.Init()")
+		err = initRunClose.Init(gadgetCtx)
 		if err != nil {
-			return
+			return out, fmt.Errorf("initializing gadget: %w", err)
 		}
-
-		if results, ok := gadgetInstance.(gadgets.GadgetResult); ok {
-			log.Debugf("getting result")
-			out, err = results.Result()
-			if err != nil {
-				err = fmt.Errorf("getting result: %w", err)
-			}
-		}
-	}()
+		defer func() {
+			log.Debugf("calling gadget.Close()")
+			initRunClose.Close()
+		}()
+	}
 
 	// Install operators
 	operatorInstances, err := gadgetCtx.Operators().Instantiate(gadgetCtx, gadgetInstance, operatorsParamCollection)
@@ -112,41 +99,21 @@ func (r *Runtime) RunGadget(gadgetCtx runtime.GadgetContext) (out []byte, err er
 	}
 	defer operatorInstances.PostGadgetRun()
 
-	if startstop, ok := gadgetInstance.(gadgets.StartStopAltGadget); ok {
-		log.Debugf("calling gadget.StartAlt()")
-		err := startstop.StartAlt()
-		if err != nil {
-			return out, fmt.Errorf("starting gadget: %w", err)
-		}
-		defer func() {
-			log.Debugf("calling gadget.StopAlt()")
-			startstop.StopAlt()
-		}()
-	} else if startstop, ok := gadgetInstance.(gadgets.StartStopGadget); ok {
-		log.Debugf("calling gadget.Start()")
-		err := startstop.Start()
-		if err != nil {
-			return out, fmt.Errorf("starting gadget: %w", err)
-		}
-		defer func() {
-			log.Debugf("calling gadget.Stop()")
-			startstop.Stop()
-		}()
-	} else if run, ok := gadgetInstance.(gadgets.RunGadget); ok {
+	if run, ok := gadgetInstance.(gadgets.RunGadget); ok {
 		log.Debugf("calling gadget.Run()")
-		err := run.Run()
+		err := run.Run(gadgetCtx)
 		if err != nil {
 			return out, fmt.Errorf("running gadget: %w", err)
 		}
+	} else if runWithResult, ok := gadgetInstance.(gadgets.RunWithResultGadget); ok {
+		log.Debugf("calling gadget.RunWithResult()")
+		out, err = runWithResult.RunWithResult(gadgetCtx)
+		if err != nil {
+			return out, fmt.Errorf("running (with result) gadget: %w", err)
+		}
+	} else {
+		return nil, errors.New("gadget not runnable")
 	}
 
-	log.Debugf("running")
-
-	if gadget.Type() != gadgets.TypeOneShot {
-		// Wait for context to close
-		<-gadgetCtx.Context().Done()
-	}
-
-	log.Debugf("stopping gadget")
-	return out, nil
+	return
 }

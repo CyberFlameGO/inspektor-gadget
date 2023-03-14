@@ -227,12 +227,6 @@ func (g *GadgetDesc) NewInstance() (gadgets.Gadget, error) {
 	return tracer, nil
 }
 
-func (t *Tracer) Init(gadgetCtx gadgets.GadgetContext) error {
-	params := gadgetCtx.GadgetParams()
-	t.protocols = params.Get(ParamProto).AsString()
-	return nil
-}
-
 func (t *Tracer) AttachContainer(container *containercollection.Container) error {
 	if _, ok := t.visitedNamespaces[container.Netns]; ok {
 		return nil
@@ -253,7 +247,9 @@ func (t *Tracer) SetEventHandlerArray(handler any) {
 	t.eventHandler = nh
 }
 
-func (t *Tracer) Run() error {
+func (t *Tracer) Run(gadgetCtx gadgets.GadgetContext) error {
+	t.protocols = gadgetCtx.GadgetParams().Get(ParamProto).AsString()
+
 	allSockets := []*socketcollectortypes.Event{}
 
 	for netns, pid := range t.visitedNamespaces {
@@ -262,7 +258,7 @@ func (t *Tracer) Run() error {
 		// the netns to avoid retrieving it again in RunCollector.
 		sockets, err := RunCollector(pid, "", "", "", socketcollectortypes.ProtocolsMap[t.protocols])
 		if err != nil {
-			return fmt.Errorf("collecting sockets in netns %d: %w", netns, err)
+			return fmt.Errorf("snapshotting sockets in netns %d: %w", netns, err)
 		}
 		allSockets = append(allSockets, sockets...)
 	}
