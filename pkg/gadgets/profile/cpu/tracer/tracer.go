@@ -32,7 +32,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 
-	gadgetcontext "github.com/inspektor-gadget/inspektor-gadget/pkg/gadget-context"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/profile/cpu/types"
 	eventtypes "github.com/inspektor-gadget/inspektor-gadget/pkg/types"
@@ -410,10 +409,7 @@ func (t *TracerWrap) Run(gadgetCtx gadgets.GadgetContext) error {
 		return fmt.Errorf("installing tracer: %w", err)
 	}
 
-	ctx, cancel := gadgetcontext.WithTimeoutOrCancel(gadgetCtx.Context(), gadgetCtx.Timeout())
-	defer cancel()
-
-	<-ctx.Done()
+	gadgetCtx.WaitForTimeoutOrDone()
 
 	res, err := t.collectResult()
 	if err != nil {

@@ -30,6 +30,7 @@ type GadgetContext interface {
 	Parser() parser.Parser
 	GadgetDesc() gadgets.GadgetDesc
 	Context() context.Context
+	WaitForTimeoutOrDone()
 	Operators() operators.Operators
 	Logger() logger.Logger
 	GadgetParams() *params.Params

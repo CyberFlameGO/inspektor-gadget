@@ -29,7 +29,6 @@ import (
 	libseccomp "github.com/seccomp/libseccomp-golang"
 	"github.com/syndtr/gocapability/capability"
 
-	gadgetcontext "github.com/inspektor-gadget/inspektor-gadget/pkg/gadget-context"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/trace/capabilities/types"
 	eventtypes "github.com/inspektor-gadget/inspektor-gadget/pkg/types"
@@ -337,11 +336,8 @@ func (t *Tracer) Run(gadgetCtx gadgets.GadgetContext) error {
 		return fmt.Errorf("installing tracer: %w", err)
 	}
 
-	ctx, cancel := gadgetcontext.WithTimeoutOrCancel(gadgetCtx.Context(), gadgetCtx.Timeout())
-	defer cancel()
-
 	go t.run()
-	<-ctx.Done()
+	gadgetCtx.WaitForTimeoutOrDone()
 
 	return nil
 }

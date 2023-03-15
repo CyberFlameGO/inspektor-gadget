@@ -28,4 +28,5 @@ type GadgetContext interface {
 	GadgetParams() *params.Params
 	Logger() logger.Logger
 	Timeout() time.Duration
+	WaitForTimeoutOrDone()
 }

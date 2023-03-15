@@ -27,7 +27,6 @@ import (
 	"github.com/cilium/ebpf/perf"
 	"github.com/vishvananda/netlink"
 
-	gadgetcontext "github.com/inspektor-gadget/inspektor-gadget/pkg/gadget-context"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/trace/bind/types"
 	eventtypes "github.com/inspektor-gadget/inspektor-gadget/pkg/types"
@@ -306,13 +305,10 @@ func (t *Tracer) Run(gadgetCtx gadgets.GadgetContext) error {
 		return fmt.Errorf("installing tracer: %w", err)
 	}
 
-	ctx, cancel := gadgetcontext.WithTimeoutOrCancel(gadgetCtx.Context(), gadgetCtx.Timeout())
-	defer cancel()
-
 	// TODO: Rework this to be able to stop the gadget when an error occurs in
 	// run(). Notice it is the same for most of gadgets in the trace category.
 	go t.run()
-	<-ctx.Done()
+	gadgetCtx.WaitForTimeoutOrDone()
 
 	return nil
 }

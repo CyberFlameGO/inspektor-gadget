@@ -25,7 +25,6 @@ import (
 	"github.com/cilium/ebpf/link"
 	"github.com/moby/moby/pkg/parsers/kernel"
 
-	gadgetcontext "github.com/inspektor-gadget/inspektor-gadget/pkg/gadget-context"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/profile/block-io/types"
 )
@@ -174,10 +173,7 @@ func (t *Tracer) RunWithResult(gadgetCtx gadgets.GadgetContext) ([]byte, error) 
 		return nil, fmt.Errorf("installing tracer: %w", err)
 	}
 
-	ctx, cancel := gadgetcontext.WithTimeoutOrCancel(gadgetCtx.Context(), gadgetCtx.Timeout())
-	defer cancel()
-
-	<-ctx.Done()
+	gadgetCtx.WaitForTimeoutOrDone()
 
 	return t.collectResult()
 }
