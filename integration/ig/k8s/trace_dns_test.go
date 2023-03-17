@@ -29,7 +29,7 @@ func TestTraceDns(t *testing.T) {
 
 	commandsPreTest := []*Command{
 		CreateTestNamespaceCommand(ns),
-		PodCommand("dnstester", "ghcr.io/inspektor-gadget/dnstester:latest", ns, "", ""),
+		PodCommand("dnstester", "ghcr.io/inspektor-gadget/dnstester:1448-merge", ns, "", ""),
 		WaitUntilPodReadyCommand(ns, "dnstester"),
 	}
 
